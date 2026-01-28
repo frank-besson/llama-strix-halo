@@ -95,7 +95,8 @@ huggingface-cli download ggml-org/gpt-oss-20b-GGUF \
 - 80B total / 3.9B active (512 experts, 10 active)
 - Significantly smarter (matches Qwen3-235B on some benchmarks)
 - ~45GB IQ4_NL — fits in 96GB VRAM
-- Slower generation (~24-40 tok/s) due to larger total weight footprint
+- **43 tok/s generation** — slower due to larger total weight footprint (43GB vs 16GB)
+- Tool calling verified working
 - Vulkan more stable than ROCm for this model
 
 ```bash
@@ -110,7 +111,7 @@ huggingface-cli download unsloth/Qwen3-Next-80B-A3B-Instruct-GGUF \
 | **Qwen3-Coder-30B-A3B** | 16 GB | 3.3B | **88** | Yes | Coding-focused |
 | Qwen3-30B-A3B-2507 | 16 GB | 3.3B | 87 | Yes | General-purpose |
 | gpt-oss-20b | 12 GB | 3.6B | 71 | Yes | Smallest, Apache 2.0 |
-| Qwen3-Next-80B-A3B | 45 GB | 3.9B | ~30 | Yes | Smartest, slower |
+| Qwen3-Next-80B-A3B | 43 GB | 3.9B | 43 | Yes | Smartest, slower |
 
 ### Not Viable
 
@@ -158,7 +159,10 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 ### 3. Run the Server
 
 ```bash
-~/llama/llama-serve.sh
+~/llama/llama-serve.sh              # Default: Qwen3-Coder-30B-A3B
+~/llama/llama-serve.sh 2507         # Qwen3-30B-A3B-2507
+~/llama/llama-serve.sh gpt-oss      # gpt-oss-20b
+~/llama/llama-serve.sh next-80b     # Qwen3-Next-80B-A3B (smartest, slower)
 ```
 
 ### 4. Connect Coding Agents

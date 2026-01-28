@@ -8,9 +8,13 @@ set -e
 PORT="${1:-8080}"
 BASE="http://localhost:${PORT}"
 
+# Auto-detect model alias from server
+MODEL_ALIAS=$(curl -s "${BASE}/v1/models" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['id'])" 2>/dev/null || echo "unknown")
+
 echo "============================================"
 echo " llama.cpp Benchmark Suite (Strix Halo)"
 echo " Target: ${BASE}"
+echo " Model: ${MODEL_ALIAS}"
 echo " Date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================"
 
@@ -32,11 +36,11 @@ done
 echo -n "Warming up..."
 curl -s "${BASE}/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -d '{"model":"coder-qwen","messages":[{"role":"user","content":"Hi"}],"max_tokens":10}' > /dev/null
+  -d "{\"model\":\"${MODEL_ALIAS}\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\"}],\"max_tokens\":10}" > /dev/null
 sleep 1
 curl -s "${BASE}/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -d '{"model":"coder-qwen","messages":[{"role":"user","content":"Hello"}],"max_tokens":10}' > /dev/null
+  -d "{\"model\":\"${MODEL_ALIAS}\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"max_tokens\":10}" > /dev/null
 sleep 1
 echo " done."
 
@@ -54,7 +58,7 @@ run_test() {
 
   curl -s "${BASE}/v1/chat/completions" \
     -H "Content-Type: application/json" \
-    -d "{\"model\":\"coder-qwen\",\"messages\":[{\"role\":\"user\",\"content\":\"${prompt}\"}],\"max_tokens\":${max_tokens}}" > /dev/null
+    -d "{\"model\":\"${MODEL_ALIAS}\",\"messages\":[{\"role\":\"user\",\"content\":\"${prompt}\"}],\"max_tokens\":${max_tokens}}" > /dev/null
 
   echo "  ${label}: done"
 }
