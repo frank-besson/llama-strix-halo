@@ -18,23 +18,35 @@ On Strix Halo, memory bandwidth (~212 GB/s) is the bottleneck for token generati
 
 | Model Type | Active Params | Token Gen Speed |
 |------------|--------------|-----------------|
-| MoE 30B (3B active) | 3B | ~43-72 tok/s |
+| MoE 30B (3B active) Q4_K_M | 3B | ~67 tok/s |
+| MoE 30B (3B active) Q8_0 | 3B | ~49 tok/s |
 | Dense 32B | 32B | ~6.4 tok/s |
 | Dense 70B | 70B | ~3 tok/s |
 
 ### Why llama.cpp over Ollama?
 
-- 13-80% faster token generation (no abstraction overhead)
+- 10-50% faster token generation (no abstraction overhead)
 - Direct control over GPU flags (UMA, rocWMMA flash attention)
-- Better prompt processing speeds
+- Better prompt processing speeds at realistic prompt lengths
 
-### Why Q8 Quantization?
+### Why Q4_K_M Quantization?
 
-On bandwidth-limited hardware, FP16 and Q8 produce the same token generation speed (both bottlenecked by bandwidth). Q8 uses less VRAM with negligible quality loss.
+Strix Halo is strictly bandwidth-bound for token generation. Smaller quantizations = less data to read per token = faster generation. Benchmarks across all quantizations:
+
+| Quant | Size | Prompt (512 tok) | Generation | Notes |
+|-------|------|------------------|------------|-------|
+| Q4_0 | 16 GB | 1277 tok/s | **77 tok/s** | Fastest, lowest quality |
+| Q4_1 | 18 GB | 1228 tok/s | 72 tok/s | Simple dequant, decent quality |
+| **Q4_K_M** | **17 GB** | **1090 tok/s** | **70 tok/s** | **Best quality/speed tradeoff** |
+| Q5_K_M | 20 GB | 1134 tok/s | 64 tok/s | K-quant overhead hurts gfx1151 |
+| Q6_K | 23 GB | 848 tok/s | 60 tok/s | Diminishing returns |
+| Q8_0 | 30 GB | 1259 tok/s | 49 tok/s | Highest quality, bandwidth-limited |
+
+**Key insight**: K-quant dequantization is expensive on gfx1151. Q4_K_M (17GB) is slightly slower than Q4_1 (18GB) despite being smaller, because K-quant kernels have more compute overhead. Q4_K_M is chosen for its superior quality at acceptable speed.
 
 ## Model
 
-**Qwen3-Coder-30B-A3B-Instruct** (Q8_0, Unsloth GGUF)
+**Qwen3-Coder-30B-A3B-Instruct** (Q4_K_M, Unsloth GGUF)
 - 30.5B total params, 3.3B active (MoE, 128 experts, 8 active)
 - 256K native context
 - Tool calling support (required for coding agents)
@@ -42,8 +54,8 @@ On bandwidth-limited hardware, FP16 and Q8 produce the same token generation spe
 
 Download:
 ```bash
-curl -L -o ~/models/Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf \
-  https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf
+huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
+  Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --local-dir ~/models
 ```
 
 ### Why Not GLM-4.7-Flash?
@@ -114,7 +126,7 @@ export PATH="/opt/rocm/bin:$PATH"
     "llama-cpp": {
       "models": {
         "coder-qwen": {
-          "name": "Qwen3 Coder 30B Q8 (llama.cpp)"
+          "name": "Qwen3 Coder 30B Q4_K_M (llama.cpp)"
         }
       },
       "name": "llama.cpp (local)",
@@ -136,7 +148,7 @@ ollama launch claude --model coder-qwen
 
 ```bash
 HIP_VISIBLE_DEVICES=0 llama-server \
-  -m ~/models/Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf \
+  -m ~/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf \
   -c 65536 \        # Context window (64K tokens)
   -fa on \          # Flash attention (critical for long context)
   -ngl 99 \         # Offload all layers to GPU
@@ -156,13 +168,31 @@ HIP_VISIBLE_DEVICES=0 llama-server \
 
 3. **gfx1151 kernels are 2-6x slower than gfx1100** — This is a ROCm maturity issue. Performance will improve as AMD updates ROCm for Strix Halo.
 
-4. **ROCm version matters** — ROCm 6.4.4 was benchmarked faster than 7.0.1. Check before upgrading.
+4. **K-quant dequantization is expensive on gfx1151** — Q4_K_M is slower than Q4_1 despite being smaller. The K-quant kernel overhead matters on this GPU architecture. Choose quantization carefully (see table above).
 
-5. **Kernel version matters** — 15% performance difference observed between Linux 6.14 and 6.15. Use latest stable.
+5. **ROCm version matters** — ROCm 6.4.4 was benchmarked faster than 7.0.1. Check before upgrading.
 
-6. **`glm4moelite` not supported in upstream llama.cpp** — GLM-4.7-Flash only works via Ollama's custom fork.
+6. **Kernel version matters** — 15% performance difference observed between Linux 6.14 and 6.15. Use latest stable.
 
-7. **Ollama GGUF tool templates are broken** — Qwen3-Coder's Ollama GGUF uses Jinja features (`reject("in", ...)`) that llama.cpp's minja parser doesn't support. Use Unsloth GGUFs for llama.cpp.
+7. **`glm4moelite` not supported in upstream llama.cpp** — GLM-4.7-Flash only works via Ollama's custom fork.
+
+8. **Ollama GGUF tool templates are broken** — Qwen3-Coder's Ollama GGUF uses Jinja features (`reject("in", ...)`) that llama.cpp's minja parser doesn't support. Use Unsloth GGUFs for llama.cpp.
+
+## Optimizations Tested (What Didn't Help)
+
+These were benchmarked and found to have no meaningful impact on this hardware/model combination:
+
+| Optimization | Result |
+|---|---|
+| `ROCBLAS_USE_HIPBLASLT=1` | No change (MoE compute not the bottleneck) |
+| `GPU_MAX_HW_QUEUES=2` | No change |
+| `HSA_ENABLE_SDMA=0` | No change |
+| `GGML_CUDA_FORCE_MMQ=1` | No change |
+| `-t 1` (single thread) | No change |
+| `--poll 100 --prio-batch 2` | Slightly worse |
+| `-ctv q4_0` (aggressive V cache quant) | 20% slower (dequant overhead > bandwidth savings) |
+| Dual GPU target (`gfx1100;gfx1151`) | Same as gfx1151-only |
+| Removing `-DGGML_HIP_ROCWMMA_FATTN=ON` | No change at 64K context |
 
 ## Ollama Configuration (Alternative)
 
@@ -199,27 +229,56 @@ PARAMETER repeat_penalty 1.05
 
 | Component | Size |
 |-----------|------|
-| Model weights (Q8) | ~30 GB |
+| Model weights (Q4_K_M) | ~17 GB |
 | KV cache (64K, q8_0) | ~3.3 GB |
 | Compute graph | ~0.4 GB |
-| **Total** | **~34 GB** |
-| **Free VRAM** | **~62 GB** |
+| **Total** | **~21 GB** |
+| **Free VRAM** | **~75 GB** |
 
 ## Performance
 
-Benchmarked with Qwen3-Coder-30B-A3B Q8_0, 64K context, flash attention enabled.
+Benchmarked with Qwen3-Coder-30B-A3B, 64K context, flash attention, gfx1151.
+
+### llama.cpp vs Ollama (Q8_0)
 
 | Metric | llama.cpp | Ollama |
 |--------|-----------|--------|
 | Generation (100 tok) | **49.0 tok/s** | 44.7 tok/s |
 | Generation (500 tok) | **48.4 tok/s** | 43.3 tok/s |
-| Prompt eval (short) | 156-182 tok/s | 257-327 tok/s |
 | Prompt eval (151 tok) | **894 tok/s** | 860 tok/s |
 
-Key tuning wins for llama.cpp:
-1. Dual GPU target (`gfx1100;gfx1151`) — gfx1100 kernels run faster on Strix Halo
+### Q4_K_M (current default)
+
+| Metric | Q4_K_M | Q8_0 | Improvement |
+|--------|--------|------|-------------|
+| Generation (100 tok) | **66.6 tok/s** | 49.0 tok/s | +36% |
+| Generation (500 tok) | **64.6 tok/s** | 48.4 tok/s | +33% |
+| Prompt eval (short) | **307-355 tok/s** | 156-182 tok/s | +2x |
+| Prompt eval (151 tok) | 890 tok/s | 894 tok/s | Same |
+
+### Raw Benchmarks (llama-bench, no server overhead)
+
+| Quant | pp512 (tok/s) | tg128 (tok/s) |
+|-------|---------------|---------------|
+| Q4_0 | 1277 | **77** |
+| Q4_K_M | 1090 | **70** |
+| Q8_0 | 1259 | **49** |
+
+Key tuning wins:
+1. **Q4_K_M quantization** — 36% faster generation than Q8_0 with acceptable quality loss
 2. KV cache quantization (`-ctk q8_0 -ctv q8_0`) — reduces memory bandwidth pressure
 3. KV cache on GPU (default, don't use `-nkvo`) — avoids CPU-GPU transfers on unified memory
+
+## Benchmarking
+
+Run the included benchmark suite:
+```bash
+# Start the server
+~/llama/llama-serve.sh &>/tmp/llama-server.log &
+
+# Run benchmarks
+~/llama/test-llama.sh
+```
 
 ## Resources
 
