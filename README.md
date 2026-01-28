@@ -55,23 +55,70 @@ Strix Halo is strictly bandwidth-bound. Smaller model = less data per token = fa
 
 *(ROCm raw benchmarks via llama-bench. Vulkan adds +17% on top of these numbers.)*
 
-## Model
+## Models
 
-**Qwen3-Coder-30B-A3B-Instruct** (IQ4_NL, Unsloth GGUF)
-- 30.5B total params, 3.3B active (MoE, 128 experts, 8 active)
-- 256K native context
-- Tool calling support (required for coding agents)
-- Unsloth GGUF required — Ollama's GGUF has broken Jinja templates for tool calling in llama.cpp
+All models use Unsloth GGUFs — Ollama's GGUFs have broken Jinja templates for tool calling in llama.cpp.
 
-Download:
+### Primary: Qwen3-Coder-30B-A3B-Instruct (IQ4_NL)
+- 30.5B total / 3.3B active (MoE, 128 experts, 8 active)
+- 256K native context, tool calling support
+- **88 tok/s generation** on Strix Halo Vulkan
+- Best choice for coding-specific tasks
+
 ```bash
 huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
   Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf --local-dir ~/models
 ```
 
-### Why Not GLM-4.7-Flash?
+### Alternative: Qwen3-30B-A3B-Instruct-2507 (IQ4_NL)
+- Same architecture (30.5B total / 3.3B active), same speed (~87 tok/s)
+- July 2025 general-purpose refresh — broader capabilities, improved instruction following
+- Tool calling verified working
 
-GLM-4.7-Flash scores higher on SWE-Bench (73.8%) but uses the `glm4moelite` architecture which upstream llama.cpp doesn't support yet. It works in Ollama (which has a custom fork) but not standalone llama.cpp.
+```bash
+huggingface-cli download unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF \
+  Qwen3-30B-A3B-Instruct-2507-IQ4_NL.gguf --local-dir ~/models
+```
+
+### Alternative: gpt-oss-20b (MXFP4)
+- 21B total / 3.6B active (OpenAI, Apache 2.0)
+- Only 12GB — smallest model with tool calling support
+- **71 tok/s generation** (MXFP4 dequant is heavier than IQ4_NL)
+- Tool calling verified working on llama.cpp v7865+
+
+```bash
+huggingface-cli download ggml-org/gpt-oss-20b-GGUF \
+  gpt-oss-20b-mxfp4.gguf --local-dir ~/models
+```
+
+### Alternative: Qwen3-Next-80B-A3B-Instruct (IQ4_NL)
+- 80B total / 3.9B active (512 experts, 10 active)
+- Significantly smarter (matches Qwen3-235B on some benchmarks)
+- ~45GB IQ4_NL — fits in 96GB VRAM
+- Slower generation (~24-40 tok/s) due to larger total weight footprint
+- Vulkan more stable than ROCm for this model
+
+```bash
+huggingface-cli download unsloth/Qwen3-Next-80B-A3B-Instruct-GGUF \
+  Qwen3-Next-80B-A3B-Instruct-IQ4_NL.gguf --local-dir ~/models
+```
+
+### Model Comparison
+
+| Model | Size | Active | Gen tok/s | Tool Calling | Notes |
+|-------|------|--------|-----------|--------------|-------|
+| **Qwen3-Coder-30B-A3B** | 16 GB | 3.3B | **88** | Yes | Coding-focused |
+| Qwen3-30B-A3B-2507 | 16 GB | 3.3B | 87 | Yes | General-purpose |
+| gpt-oss-20b | 12 GB | 3.6B | 71 | Yes | Smallest, Apache 2.0 |
+| Qwen3-Next-80B-A3B | 45 GB | 3.9B | ~30 | Yes | Smartest, slower |
+
+### Not Viable
+
+- **GLM-4.7-Flash**: `glm4moelite` architecture not supported in upstream llama.cpp
+- **Mixtral 8x22B**: 39B active params = ~5-8 tok/s (too slow)
+- **DeepSeek-V3**: 671B total, doesn't fit in 96GB
+- **MiniMax-M2.1**: 230B total, Q4 = 129GB (doesn't fit)
+- **Phi-3.5-MoE**: No tool calling support
 
 ## Setup
 
