@@ -1,0 +1,102 @@
+#!/bin/bash
+# claude-cpp: Run Claude Code powered by local llama.cpp
+# This does NOT affect your normal 'claude' installation.
+# It starts llama-server + an Anthropic API proxy, then launches claude
+# with env vars pointing at the local proxy.
+#
+# Usage: claude-cpp [model] [-- claude-args...]
+#   model: coder (default), 2507, gpt-oss, next-80b
+#   Everything after -- is passed to claude
+#
+# Examples:
+#   claude-cpp                    # Default model, interactive
+#   claude-cpp next-80b           # Use Qwen3-Next-80B
+#   claude-cpp -- --print "hi"   # Non-interactive mode
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROXY_PORT=8082
+LLAMA_PORT=8080
+
+# Parse model argument
+MODEL="${1:-coder}"
+shift 2>/dev/null || true
+
+# If first remaining arg is --, skip it
+if [ "${1:-}" = "--" ]; then
+    shift
+fi
+
+cleanup() {
+    # Kill proxy if we started it
+    if [ -n "${PROXY_PID:-}" ]; then
+        kill "$PROXY_PID" 2>/dev/null
+        wait "$PROXY_PID" 2>/dev/null
+    fi
+    # Kill llama-server if we started it
+    if [ -n "${LLAMA_PID:-}" ]; then
+        kill "$LLAMA_PID" 2>/dev/null
+        wait "$LLAMA_PID" 2>/dev/null
+    fi
+}
+trap cleanup EXIT
+
+# Start llama-server if not already running
+if ! curl -s "http://localhost:${LLAMA_PORT}/health" 2>/dev/null | grep -q "ok"; then
+    echo "[claude-cpp] Starting llama-server ($MODEL)..."
+    bash "$SCRIPT_DIR/llama-serve.sh" "$MODEL" &>/tmp/llama-server.log &
+    LLAMA_PID=$!
+
+    # Wait for server to be ready
+    for i in $(seq 1 60); do
+        if curl -s "http://localhost:${LLAMA_PORT}/health" 2>/dev/null | grep -q "ok"; then
+            break
+        fi
+        if ! kill -0 "$LLAMA_PID" 2>/dev/null; then
+            echo "[claude-cpp] llama-server failed to start. Check /tmp/llama-server.log"
+            exit 1
+        fi
+        if [ "$i" -eq 60 ]; then
+            echo "[claude-cpp] llama-server timed out"
+            exit 1
+        fi
+        sleep 1
+    done
+    MODEL_NAME=$(curl -s "http://localhost:${LLAMA_PORT}/v1/models" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['id'])" 2>/dev/null || echo "$MODEL")
+    echo "[claude-cpp] llama-server ready: $MODEL_NAME"
+else
+    MODEL_NAME=$(curl -s "http://localhost:${LLAMA_PORT}/v1/models" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['id'])" 2>/dev/null || echo "already running")
+    echo "[claude-cpp] llama-server already running: $MODEL_NAME"
+fi
+
+# Start the Anthropic-to-OpenAI proxy if not already running
+if ! curl -s "http://localhost:${PROXY_PORT}/health" 2>/dev/null | grep -q "ok"; then
+    python3 "$SCRIPT_DIR/anthropic-proxy.py" "$PROXY_PORT" &
+    PROXY_PID=$!
+
+    for i in $(seq 1 10); do
+        if curl -s "http://localhost:${PROXY_PORT}/health" 2>/dev/null | grep -q "ok"; then
+            break
+        fi
+        if [ "$i" -eq 10 ]; then
+            echo "[claude-cpp] Proxy failed to start"
+            exit 1
+        fi
+        sleep 0.5
+    done
+    echo "[claude-cpp] Anthropic proxy ready on :${PROXY_PORT}"
+else
+    echo "[claude-cpp] Anthropic proxy already running on :${PROXY_PORT}"
+fi
+
+echo "[claude-cpp] Launching Claude Code (local)..."
+echo ""
+
+# Launch claude with env vars pointing at our local proxy
+# These env vars ONLY affect this subprocess — your normal claude is untouched
+ANTHROPIC_BASE_URL="http://127.0.0.1:${PROXY_PORT}" \
+ANTHROPIC_API_KEY="claude-cpp" \
+ANTHROPIC_AUTH_TOKEN="claude-cpp" \
+DISABLE_PROMPT_CACHING="1" \
+    claude --model "$MODEL_NAME" "$@"
