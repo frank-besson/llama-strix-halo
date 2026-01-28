@@ -29,13 +29,13 @@ On Strix Halo (gfx1151), the **Vulkan backend is 17-20% faster** than ROCm/HIP f
 
 | Backend | Gen (100 tok) | Gen (500 tok) | Gen (8000 tok) |
 |---------|---------------|---------------|----------------|
-| **Vulkan (RADV)** | **88.1 tok/s** | **86.2 tok/s** | **73.3 tok/s** |
+| **Vulkan (RADV) + FA + bf16** | **87.6 tok/s** | **86.3 tok/s** | **73.0 tok/s** |
 | ROCm/HIP | 73.7 tok/s | 72.1 tok/s | — |
 | Ollama (ROCm) | 44.7 tok/s | 43.3 tok/s | — |
 
-Vulkan lacks flash attention, so prompt processing is slower at short prompts. But for coding agents where you're waiting for each generated token, Vulkan wins decisively.
+Vulkan now supports flash attention via KHR_coopmat1 (our build includes the latest refactor). Combined with `RADV_PERFTEST=bfloat16`, this gives the best long-session performance.
 
-**When to use ROCm instead**: If you need extremely fast prompt processing for very long inputs (>10K tokens) and your generation lengths are short. The ROCm build with `-fa on` gets ~1000+ tok/s prompt eval at 151 tokens vs Vulkan's ~654 tok/s.
+**When to use ROCm instead**: If you need extremely fast prompt processing for very long inputs (>10K tokens) and your generation lengths are short. The ROCm build gets ~1000+ tok/s prompt eval at 151 tokens vs Vulkan's ~683 tok/s.
 
 ### Why IQ4_NL Quantization?
 
@@ -144,9 +144,10 @@ ollama launch claude --model coder-qwen
 ## Server Flags Explained
 
 ```bash
-llama-server \
+RADV_PERFTEST=bfloat16 llama-server \
   -m ~/models/Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf \
   -c 65536 \        # Context window (64K tokens)
+  -fa on \          # Flash attention (Vulkan coopmat1, scales at long context)
   -ngl 99 \         # Offload all layers to GPU
   --no-mmap \       # Required for Strix Halo (hangs without it)
   -ctk f16 \        # KV cache K type (f16 avoids dequant overhead)
@@ -156,6 +157,9 @@ llama-server \
   -a coder-qwen     # Model alias for API responses
 ```
 
+- **`RADV_PERFTEST=bfloat16`**: Enables bfloat16 cooperative matrix on GFX11-11.5. Small but consistent pp improvement.
+- **`-fa on`**: Vulkan flash attention via KHR_coopmat1. Minor gains at short context, increasingly important as coding sessions grow to 10K-30K+ tokens.
+
 ## Strix Halo Gotchas
 
 1. **`--no-mmap` is mandatory** — Without it, model loading hangs indefinitely on Strix Halo.
@@ -164,7 +168,7 @@ llama-server \
 
 3. **K-quant dequantization is expensive on gfx1151** — Q4_K_M is slower than Q4_1 despite being smaller. IQ4_NL and Q4_0/Q4_1 use simpler dequant paths that run faster. Choose quantization carefully.
 
-4. **No flash attention with Vulkan** — Vulkan doesn't support flash attention, so prompt processing is slower. Generation degradation at long context is gentle (~88 tok/s at 100 tokens, ~73 tok/s at 8000 tokens).
+4. **Vulkan flash attention now works** — Via KHR_coopmat1 (requires recent llama.cpp build). Enable with `-fa on`. Gives marginal gains at short context but increasingly important for long coding sessions (10K-30K+ tokens).
 
 5. **ROCm version matters** — ROCm 6.4.4 was benchmarked faster than 7.0.1.
 
@@ -184,7 +188,8 @@ llama-server \
 | **IQ4_NL quantization** | **+50% generation** vs Q8_0 (75 vs 49 tok/s raw) |
 | **KV cache on GPU** (don't use `-nkvo`) | +10% generation |
 | **KV cache f16** (no quant overhead) | +1-2% generation |
-| Dual GPU target `gfx1100;gfx1151` (ROCm only) | No effect (tested, same as gfx1151-only) |
+| **`RADV_PERFTEST=bfloat16`** | +5% prompt processing, consistent tg improvement |
+| **Vulkan flash attention** (`-fa on`) | Better scaling at long context (8K+ tokens) |
 
 ### What Didn't Help
 

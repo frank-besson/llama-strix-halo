@@ -1,7 +1,8 @@
 #!/bin/bash
-llama-server \
+RADV_PERFTEST=bfloat16 llama-server \
   -m ~/models/Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf \
   -c 65536 \
+  -fa on \
   -ngl 99 \
   --no-mmap \
   -ctk f16 \
