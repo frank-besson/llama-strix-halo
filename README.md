@@ -167,6 +167,51 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 
 ### 4. Connect Coding Agents
 
+**Claude Code** (via [claude-code-router](https://github.com/musistudio/claude-code-router)):
+
+```bash
+# Install
+npm install -g @musistudio/claude-code-router
+```
+
+Create `~/.claude-code-router/config.json`:
+```json
+{
+  "LOG": true,
+  "HOST": "127.0.0.1",
+  "PORT": 3456,
+  "Providers": [
+    {
+      "name": "llama-cpp",
+      "api_base_url": "http://localhost:8080/v1/chat/completions",
+      "api_key": "local",
+      "models": [
+        "coder-qwen",
+        "qwen3-2507",
+        "gpt-oss-20b",
+        "qwen3-next-80b"
+      ]
+    }
+  ],
+  "Router": {
+    "default": "llama-cpp,coder-qwen"
+  }
+}
+```
+
+Then run:
+```bash
+# Start the router (runs in background)
+ccr start
+
+# Launch Claude Code through the router
+ccr code
+```
+
+The router translates Anthropic's Messages API to OpenAI Chat Completions (which llama-server speaks), handling streaming, tool use, and thinking blocks. Your normal `claude` command is unaffected.
+
+To switch models, edit the `Router.default` value in the config (e.g., `"llama-cpp,qwen3-next-80b"` for the smarter model). The model name must match the `-a` alias used by `llama-serve.sh`.
+
 **OpenCode** (`~/.config/opencode/opencode.json`):
 ```json
 {
@@ -185,11 +230,6 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
     }
   }
 }
-```
-
-**Claude Code** (via Ollama):
-```bash
-ollama launch claude --model coder-qwen
 ```
 
 ## Server Flags Explained
