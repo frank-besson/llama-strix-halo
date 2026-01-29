@@ -33,6 +33,11 @@ fi
 cmake --build build --config Release -j$(nproc)
 
 echo ""
-echo "Build complete ($BACKEND). Install with:"
-echo "  sudo cp /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server"
-echo "  sudo cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli"
+echo "Build complete ($BACKEND). Installing..."
+
+sudo cp /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server
+sudo cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli
+sudo cp /tmp/llama.cpp/build/bin/libggml*.so* /usr/local/lib/
+sudo ldconfig /usr/local/lib
+
+echo "Installed llama-server, llama-cli, and shared libraries to /usr/local/"
