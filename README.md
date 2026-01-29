@@ -57,41 +57,53 @@ Strix Halo is strictly bandwidth-bound. Smaller model = less data per token = fa
 
 ## Models
 
-All models use Unsloth GGUFs — Ollama's GGUFs have broken Jinja templates for tool calling in llama.cpp.
+All models use bartowski/Unsloth GGUFs — Ollama's GGUFs have broken Jinja templates for tool calling in llama.cpp.
 
-### Primary: Qwen3-Coder-30B-A3B-Instruct (IQ4_NL)
+### Coding: Qwen3-Coder-30B-A3B-Instruct (IQ4_NL)
 - 30.5B total / 3.3B active (MoE, 128 experts, 8 active)
 - 256K native context, tool calling support
-- **88 tok/s generation** on Strix Halo Vulkan
+- **89 tok/s generation** on Strix Halo Vulkan
 - Best choice for coding-specific tasks
 
 ```bash
-huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
+hf download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
   Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf --local-dir ~/models
 ```
 
-### Alternative: Qwen3-30B-A3B-Instruct-2507 (IQ4_NL)
+### General Agent: GLM-4.7-Flash (IQ4_NL)
+- 30B total / ~3B active (MoE)
+- 200K context (with MLA), native tool calling
+- **71 tok/s generation** on Strix Halo Vulkan
+- Best tool calling benchmark: τ²-Bench 79.5 (vs Qwen3-30B 49.0)
+- Best choice for agentic/research tasks with MCP tools
+
+```bash
+hf download bartowski/zai-org_GLM-4.7-Flash-GGUF \
+  zai-org_GLM-4.7-Flash-IQ4_NL.gguf --local-dir ~/models
+```
+
+### General: Qwen3-30B-A3B-Instruct-2507 (IQ4_NL)
 - Same architecture (30.5B total / 3.3B active), same speed (~87 tok/s)
 - July 2025 general-purpose refresh — broader capabilities, improved instruction following
 - Tool calling verified working
 
 ```bash
-huggingface-cli download unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF \
+hf download unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF \
   Qwen3-30B-A3B-Instruct-2507-IQ4_NL.gguf --local-dir ~/models
 ```
 
-### Alternative: gpt-oss-20b (MXFP4)
+### Lightweight: gpt-oss-20b (MXFP4)
 - 21B total / 3.6B active (OpenAI, Apache 2.0)
 - Only 12GB — smallest model with tool calling support
 - **71 tok/s generation** (MXFP4 dequant is heavier than IQ4_NL)
 - Tool calling verified working on llama.cpp v7865+
 
 ```bash
-huggingface-cli download ggml-org/gpt-oss-20b-GGUF \
+hf download ggml-org/gpt-oss-20b-GGUF \
   gpt-oss-20b-mxfp4.gguf --local-dir ~/models
 ```
 
-### Alternative: Qwen3-Next-80B-A3B-Instruct (IQ4_NL)
+### Quality: Qwen3-Next-80B-A3B-Instruct (IQ4_NL)
 - 80B total / 3.9B active (512 experts, 10 active)
 - Significantly smarter (matches Qwen3-235B on some benchmarks)
 - ~45GB IQ4_NL — fits in 96GB VRAM
@@ -100,26 +112,51 @@ huggingface-cli download ggml-org/gpt-oss-20b-GGUF \
 - Vulkan more stable than ROCm for this model
 
 ```bash
-huggingface-cli download unsloth/Qwen3-Next-80B-A3B-Instruct-GGUF \
+hf download unsloth/Qwen3-Next-80B-A3B-Instruct-GGUF \
   Qwen3-Next-80B-A3B-Instruct-IQ4_NL.gguf --local-dir ~/models
 ```
 
 ### Model Comparison
 
-| Model | Size | Active | Gen tok/s | Tool Calling | Notes |
-|-------|------|--------|-----------|--------------|-------|
-| **Qwen3-Coder-30B-A3B** | 16 GB | 3.3B | **88** | Yes | Coding-focused |
-| Qwen3-30B-A3B-2507 | 16 GB | 3.3B | 87 | Yes | General-purpose |
-| gpt-oss-20b | 12 GB | 3.6B | 71 | Yes | Smallest, Apache 2.0 |
-| Qwen3-Next-80B-A3B | 43 GB | 3.9B | 43 | Yes | Smartest, slower |
+All benchmarked on Strix Halo, Vulkan backend, IQ4_NL quant, 64K context, `-fa on`.
+
+| Model | Arch | Size | Active | Gen tok/s | Capability | Best For |
+|-------|------|------|--------|-----------|------------|----------|
+| **Qwen3-Coder-30B-A3B** | MoE | 17 GB | 3.3B | **89** | 7/12 | Coding |
+| Qwen3-30B-A3B-2507 | MoE | 17 GB | 3.3B | 87 | 7/12 | General |
+| GLM-4.7-Flash | MoE | 16 GB | ~3B | 71 | 8/12 | Agent/tool use |
+| gpt-oss-20b | MoE | 12 GB | 3.6B | 75 | 8/12 | Lightweight |
+| Qwen3-Next-80B-A3B | MoE | 43 GB | 3.9B | 43 | 8/12 | Quality |
+
+### Capability Test Results
+
+Tested with `~/llama/test-capabilities.sh` — 12 tests across 3 categories. Run `bash ~/llama/test-capabilities.sh` to reproduce.
+
+| Model | Tool Calling | Instruction | Reasoning | Total | tok/s |
+|-------|-------------|-------------|-----------|-------|-------|
+| gpt-oss-20b | 2/5 | 3/4 | 3/3 | **8/12** | 75 |
+| glm-4.7-flash | 2/5 | 3/4 | 3/3 | **8/12** | 70 |
+| qwen3-next-80b | 2/5 | 3/4 | 3/3 | **8/12** | 44 |
+| qwen3-coder-30b | 2/5 | 3/4 | 2/3 | **7/12** | 87 |
+| qwen3-2507 | 2/5 | 3/4 | 2/3 | **7/12** | 87 |
+
+**Test categories:**
+- **Tool Calling** (5 tests): single tool call, multi-tool call, complex args, tool_choice:none, multi-turn tool use
+- **Instruction Following** (4 tests): JSON-only output, bullet point constraint, system persona, refusal
+- **Reasoning** (3 tests): math (17×23+45=436), logic (syllogism), code generation
+
+**Notes:**
+- 3 tool calling tests fail universally due to **llama.cpp server limitations** (not model issues): multi-tool calls (server returns only 1 tool_call per response), complex nested args, and `tool_choice: "none"` (server ignores the parameter). JSON-only output also fails on all models (thinking models emit CoT before JSON)
+- Qwen Coder and Qwen3-2507 fail the math test — their chain-of-thought uses thinking tokens but still arrives at the wrong answer
+- All models pass: single tool call, bullet points, system persona, refusal, logic syllogism
 
 ### Not Viable
 
-- **GLM-4.7-Flash**: `glm4moelite` architecture not supported in upstream llama.cpp
 - **Mixtral 8x22B**: 39B active params = ~5-8 tok/s (too slow)
 - **DeepSeek-V3**: 671B total, doesn't fit in 96GB
 - **MiniMax-M2.1**: 230B total, Q4 = 129GB (doesn't fit)
-- **Phi-3.5-MoE**: No tool calling support
+- **Kimi-K2**: 1T total, doesn't fit
+- **ERNIE-4.5-21B-A3B**: llama.cpp MoE support incomplete, tool calling template missing
 
 ## Setup
 
@@ -159,10 +196,11 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 ### 3. Run the Server
 
 ```bash
-~/llama/llama-serve.sh              # Default: Qwen3-Coder-30B-A3B
-~/llama/llama-serve.sh 2507         # Qwen3-30B-A3B-2507
-~/llama/llama-serve.sh gpt-oss      # gpt-oss-20b
-~/llama/llama-serve.sh next-80b     # Qwen3-Next-80B-A3B (smartest, slower)
+~/llama/llama-serve.sh              # Default: GLM-4.7-Flash (71 tok/s, best agentic)
+~/llama/llama-serve.sh coder        # Qwen3-Coder-30B-A3B (89 tok/s)
+~/llama/llama-serve.sh 2507         # Qwen3-30B-A3B-2507 (87 tok/s)
+~/llama/llama-serve.sh gpt-oss      # gpt-oss-20b (71 tok/s)
+~/llama/llama-serve.sh next-80b     # Qwen3-Next-80B-A3B (43 tok/s, smartest)
 ```
 
 ### 4. Connect Coding Agents
@@ -186,7 +224,8 @@ Create `~/.claude-code-router/config.json`:
       "api_base_url": "http://localhost:8080/v1/chat/completions",
       "api_key": "local",
       "models": [
-        "coder-qwen",
+        "qwen3-coder-30b",
+        "glm-4.7-flash",
         "qwen3-2507",
         "gpt-oss-20b",
         "qwen3-next-80b"
@@ -194,7 +233,7 @@ Create `~/.claude-code-router/config.json`:
     }
   ],
   "Router": {
-    "default": "llama-cpp,coder-qwen"
+    "default": "llama-cpp,qwen3-coder-30b"
   }
 }
 ```
@@ -218,7 +257,7 @@ To switch models, edit the `Router.default` value in the config (e.g., `"llama-c
   "provider": {
     "llama-cpp": {
       "models": {
-        "coder-qwen": {
+        "qwen3-coder-30b": {
           "name": "Qwen3 Coder 30B IQ4_NL (llama.cpp)"
         }
       },
@@ -245,7 +284,7 @@ RADV_PERFTEST=bfloat16 llama-server \
   -ctv f16 \        # KV cache V type
   --jinja \         # Enable Jinja templates (required for tool calling)
   -np 1 \           # Single parallel slot (max bandwidth per session)
-  -a coder-qwen     # Model alias for API responses
+  -a qwen3-coder-30b     # Model alias for API responses
 ```
 
 - **`RADV_PERFTEST=bfloat16`**: Enables bfloat16 cooperative matrix on GFX11-11.5. Small but consistent pp improvement.
@@ -265,9 +304,7 @@ RADV_PERFTEST=bfloat16 llama-server \
 
 6. **Kernel version matters** — 15% performance difference observed between Linux 6.14 and 6.15. Use latest stable.
 
-7. **`glm4moelite` not supported in upstream llama.cpp** — GLM-4.7-Flash only works via Ollama's custom fork.
-
-8. **Ollama GGUF tool templates are broken** — Qwen3-Coder's Ollama GGUF uses Jinja features (`reject("in", ...)`) that llama.cpp's minja parser doesn't support. Use Unsloth GGUFs.
+7. **Ollama GGUF tool templates are broken** — Qwen3-Coder's Ollama GGUF uses Jinja features (`reject("in", ...)`) that llama.cpp's minja parser doesn't support. Use Unsloth GGUFs.
 
 ## Optimizations Tested
 
@@ -329,7 +366,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama
 
 **Starting point**: Ollama Q8_0 ROCm = 44.7 tok/s generation
 
-**Final result**: llama.cpp IQ4_NL Vulkan = **88.1 tok/s generation** (+97%)
+**Final result**: llama.cpp IQ4_NL Vulkan = **89 tok/s generation** (+99%)
 
 | Milestone | Gen (100 tok) | Change |
 |-----------|---------------|--------|
