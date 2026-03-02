@@ -8,7 +8,7 @@ Running local coding agents (Claude Code, OpenCode) with llama.cpp on an AMD Ryz
 - **GPU**: Radeon 8060S (gfx1151), 40 CUs @ 2.9 GHz
 - **VRAM**: 96GB unified (LPDDR5X)
 - **Memory Bandwidth**: ~212 GB/s
-- **OS**: Arch Linux (kernel 6.18.3)
+- **OS**: NixOS 25.11 (kernel 6.19)
 
 ## Architecture Choices
 
