@@ -103,17 +103,41 @@ hf download ggml-org/gpt-oss-20b-GGUF \
   gpt-oss-20b-mxfp4.gguf --local-dir ~/models
 ```
 
-### Quality: Qwen3-Next-80B-A3B-Instruct (IQ4_NL)
-- 80B total / 3.9B active (512 experts, 10 active)
-- Significantly smarter (matches Qwen3-235B on some benchmarks)
-- ~45GB IQ4_NL — fits in 96GB VRAM
-- **43 tok/s generation** — slower due to larger total weight footprint (43GB vs 16GB)
-- Tool calling verified working
-- Vulkan more stable than ROCm for this model
+### Agent: Nemotron-3-Nano-30B-A3B (IQ4_NL)
+- 30B total / 3.5B active (Mamba-2 + MoE hybrid: 23 Mamba-2, 23 MoE, 6 attention layers)
+- 128 experts + 1 shared, 6 activated per token
+- 1M context, explicitly fine-tuned for tool calling
+- ~18GB IQ4_NL — lightweight, fast
+- **75 tok/s generation** on Strix Halo Vulkan
+- Officially supported in llama.cpp (NVIDIA collaboration)
 
 ```bash
-hf download unsloth/Qwen3-Next-80B-A3B-Instruct-GGUF \
-  Qwen3-Next-80B-A3B-Instruct-IQ4_NL.gguf --local-dir ~/models
+hf download unsloth/Nemotron-3-Nano-30B-A3B-GGUF \
+  Nemotron-3-Nano-30B-A3B-IQ4_NL.gguf --local-dir ~/models
+```
+
+### Coding Agent: Qwen3-Coder-Next (IQ4_NL)
+- 80B total / 3B active (512 experts, 10 active)
+- **Hybrid DeltaNet + MoE architecture** (3:1 linear-to-standard attention ratio)
+- 256K context, coding/agent-specialized with tool calling
+- ~43GB IQ4_NL — fits in 96GB VRAM
+- Requires llama.cpp build 8185+ for Vulkan DeltaNet support
+
+```bash
+hf download unsloth/Qwen3-Coder-Next-GGUF \
+  Qwen3-Coder-Next-IQ4_NL.gguf --local-dir ~/models
+```
+
+### General: Qwen3.5-35B-A3B (UD-Q4_K_XL)
+- 35B total / 3B active (256 experts, 8 active)
+- **Hybrid DeltaNet + MoE architecture** (same as Coder-Next)
+- 262K context (extendable to 1M), general-purpose
+- ~20GB UD-Q4_K_XL — no IQ4_NL available, uses Unsloth Dynamic 2.0 quant
+- Requires llama.cpp build 8185+ for Vulkan DeltaNet support
+
+```bash
+hf download unsloth/Qwen3.5-35B-A3B-GGUF \
+  Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf --local-dir ~/models
 ```
 
 ### Model Comparison
@@ -122,11 +146,12 @@ All benchmarked on Strix Halo, Vulkan backend, IQ4_NL quant, 64K context, `-fa o
 
 | Model | Arch | Size | Active | Gen tok/s | Capability | Best For |
 |-------|------|------|--------|-----------|------------|----------|
-| **Qwen3-Coder-30B-A3B** | MoE | 17 GB | 3.3B | **89** | 7/12 | Coding |
-| Qwen3-30B-A3B-2507 | MoE | 17 GB | 3.3B | 87 | 7/12 | General |
-| GLM-4.7-Flash | MoE | 16 GB | ~3B | 71 | 8/12 | Agent/tool use |
-| gpt-oss-20b | MoE | 12 GB | 3.6B | 75 | 8/12 | Lightweight |
-| Qwen3-Next-80B-A3B | MoE | 43 GB | 3.9B | 43 | 8/12 | Quality |
+| **Qwen3-Coder-30B-A3B** | MoE | 17 GB | 3.3B | **87** | 7/12 | Coding (fastest) |
+| gpt-oss-20b | MoE | 12 GB | 3.6B | 77 | 8/12 | Lightweight |
+| Nemotron-3-Nano | Mamba+MoE | 18 GB | 3.5B | 75 | 8/12 | Agent/tool use |
+| GLM-4.7-Flash | MoE | 16 GB | ~3B | 69 | 8/12 | Agent/tool use |
+| Qwen3-Coder-Next | DeltaNet+MoE | 43 GB | 3B | 44 | 8/12 | Quality coding |
+| Qwen3.5-35B-A3B | DeltaNet+MoE | 20 GB | 3B | 41 | 7/12 | General |
 
 ### Capability Test Results
 
@@ -134,11 +159,12 @@ Tested with `~/llama/test-capabilities.sh` — 12 tests across 3 categories. Run
 
 | Model | Tool Calling | Instruction | Reasoning | Total | tok/s |
 |-------|-------------|-------------|-----------|-------|-------|
-| gpt-oss-20b | 2/5 | 3/4 | 3/3 | **8/12** | 75 |
-| glm-4.7-flash | 2/5 | 3/4 | 3/3 | **8/12** | 70 |
-| qwen3-next-80b | 2/5 | 3/4 | 3/3 | **8/12** | 44 |
+| gpt-oss-20b | 2/5 | 3/4 | 3/3 | **8/12** | 77 |
+| nemotron-nano | 2/5 | 3/4 | 3/3 | **8/12** | 75 |
+| glm-4.7-flash | 2/5 | 3/4 | 3/3 | **8/12** | 69 |
+| qwen3-coder-next | 2/5 | 3/4 | 3/3 | **8/12** | 44 |
+| qwen3.5-35b | 2/5 | 2/4 | 3/3 | **7/12** | 41 |
 | qwen3-coder-30b | 2/5 | 3/4 | 2/3 | **7/12** | 87 |
-| qwen3-2507 | 2/5 | 3/4 | 2/3 | **7/12** | 87 |
 
 **Test categories:**
 - **Tool Calling** (5 tests): single tool call, multi-tool call, complex args, tool_choice:none, multi-turn tool use
@@ -146,12 +172,18 @@ Tested with `~/llama/test-capabilities.sh` — 12 tests across 3 categories. Run
 - **Reasoning** (3 tests): math (17×23+45=436), logic (syllogism), code generation
 
 **Notes:**
-- 3 tool calling tests fail universally due to **llama.cpp server limitations** (not model issues): multi-tool calls (server returns only 1 tool_call per response), complex nested args, and `tool_choice: "none"` (server ignores the parameter). JSON-only output also fails on all models (thinking models emit CoT before JSON)
-- Qwen Coder and Qwen3-2507 fail the math test — their chain-of-thought uses thinking tokens but still arrives at the wrong answer
-- All models pass: single tool call, bullet points, system persona, refusal, logic syllogism
+- Multi-tool parallel calling works via `parallel_tool_calls: true` in the request (confirmed 5/5 on Nemotron and GLM). The test is non-deterministic — some models occasionally return sequential calls instead of parallel
+- 2 tool calling tests fail universally due to **llama.cpp server limitations**: complex nested args and `tool_choice: "none"` (server ignores the parameter)
+- JSON-only output fails on all models (thinking models emit chain-of-thought before JSON)
+- Qwen3-Coder-30B fails the math test — chain-of-thought arrives at the wrong answer
+- All models pass: single tool call, multi-turn tool use, system persona, refusal, logic, code generation
 
 ### Not Viable
 
+- **GLM-5** (Feb 2026): 744B / 44B active — doesn't fit in 96GB VRAM
+- **DeepSeek V4**: Not yet released (expected March 2026), 1T / ~32B active
+- **Qwen3.5-397B-A17B**: 17B active = ~12 tok/s (too slow for interactive use)
+- **Mistral Large 3**: 675B / 41B active — doesn't fit in 96GB VRAM
 - **Mixtral 8x22B**: 39B active params = ~5-8 tok/s (too slow)
 - **DeepSeek-V3**: 671B total, doesn't fit in 96GB
 - **MiniMax-M2.1**: 230B total, Q4 = 129GB (doesn't fit)
@@ -198,9 +230,10 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 ```bash
 ~/llama/llama-serve.sh              # Default: GLM-4.7-Flash (71 tok/s, best agentic)
 ~/llama/llama-serve.sh coder        # Qwen3-Coder-30B-A3B (89 tok/s)
-~/llama/llama-serve.sh 2507         # Qwen3-30B-A3B-2507 (87 tok/s)
-~/llama/llama-serve.sh gpt-oss      # gpt-oss-20b (71 tok/s)
-~/llama/llama-serve.sh next-80b     # Qwen3-Next-80B-A3B (43 tok/s, smartest)
+~/llama/llama-serve.sh coder-next   # Qwen3-Coder-Next (80B/3B, DeltaNet+MoE)
+~/llama/llama-serve.sh nemotron     # Nemotron-3-Nano (30B/3.5B, Mamba+MoE, 75 tok/s)
+~/llama/llama-serve.sh qwen3.5      # Qwen3.5-35B-A3B (35B/3B, DeltaNet+MoE)
+~/llama/llama-serve.sh gpt-oss      # gpt-oss-20b (77 tok/s)
 ```
 
 ### 4. Connect Coding Agents
@@ -225,10 +258,11 @@ Create `~/.claude-code-router/config.json`:
       "api_key": "local",
       "models": [
         "qwen3-coder-30b",
+        "qwen3-coder-next",
+        "nemotron-nano",
+        "qwen3.5-35b",
         "glm-4.7-flash",
-        "qwen3-2507",
-        "gpt-oss-20b",
-        "qwen3-next-80b"
+        "gpt-oss-20b"
       ]
     }
   ],

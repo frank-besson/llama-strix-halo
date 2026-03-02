@@ -37,7 +37,7 @@ echo "Build complete ($BACKEND). Installing..."
 
 sudo cp /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server
 sudo cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli
-sudo cp /tmp/llama.cpp/build/bin/libggml*.so* /usr/local/lib/
-sudo ldconfig /usr/local/lib
+sudo cp /tmp/llama.cpp/build/bin/lib*.so* /usr/local/lib/
+sudo ldconfig /usr/local/lib 2>/dev/null || true
 
 echo "Installed llama-server, llama-cli, and shared libraries to /usr/local/"

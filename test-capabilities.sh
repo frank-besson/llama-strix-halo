@@ -8,7 +8,7 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 PORT=8080
 BASE="http://localhost:${PORT}"
-ALL_MODELS=(coder 2507 gpt-oss glm nemotron mistral next-80b)
+ALL_MODELS=(coder coder-next nemotron qwen3.5 gpt-oss glm)
 MODELS=("${@:-${ALL_MODELS[@]}}")
 if [ $# -eq 0 ]; then MODELS=("${ALL_MODELS[@]}"); fi
 
@@ -150,6 +150,7 @@ req = {
         {'type':'function','function':{'name':'get_weather','description':'Get current weather for a location','parameters':{'type':'object','properties':{'location':{'type':'string','description':'City name'}},'required':['location']}}},
         {'type':'function','function':{'name':'get_current_time','description':'Get the current time in a timezone','parameters':{'type':'object','properties':{'timezone':{'type':'string','description':'IANA timezone'}},'required':['timezone']}}}
     ],
+    'parallel_tool_calls': True,
     'max_tokens': 500
 }
 print(json.dumps(req))

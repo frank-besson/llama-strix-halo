@@ -1,7 +1,7 @@
 #!/bin/bash
 # Launch llama-server with optimized settings for AMD Strix Halo (gfx1151)
 # Usage: ./llama-serve.sh [model]
-#   model: glm (default), coder, qwen3-2507, gpt-oss, next-80b
+#   model: glm (default), coder, coder-next, nemotron, qwen3.5, qwen3-2507, gpt-oss, next-80b
 
 MODEL="${1:-glm}"
 MODELS_DIR=~/models
@@ -20,6 +20,21 @@ case "$MODEL" in
   gpt-oss|gpt)
     MODEL_PATH="${MODELS_DIR}/gpt-oss-20b-mxfp4.gguf"
     ALIAS="gpt-oss-20b"
+    CTX=163840
+    ;;
+  coder-next|next-coder)
+    MODEL_PATH="${MODELS_DIR}/Qwen3-Coder-Next-IQ4_NL.gguf"
+    ALIAS="qwen3-coder-next"
+    CTX=163840
+    ;;
+  nemotron|nemotron-nano)
+    MODEL_PATH="${MODELS_DIR}/Nemotron-3-Nano-30B-A3B-IQ4_NL.gguf"
+    ALIAS="nemotron-nano"
+    CTX=163840
+    ;;
+  qwen3.5|3.5)
+    MODEL_PATH="${MODELS_DIR}/Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf"
+    ALIAS="qwen3.5-35b"
     CTX=163840
     ;;
   next-80b|next|80b)
@@ -46,6 +61,9 @@ if [ ! -f "$MODEL_PATH" ]; then
   echo "Available models:"
   echo "  glm        - GLM-4.7-Flash IQ4_NL (default)"
   echo "  coder      - Qwen3-Coder-30B-A3B IQ4_NL"
+  echo "  coder-next - Qwen3-Coder-Next IQ4_NL (80B/3B active, DeltaNet+MoE)"
+  echo "  nemotron   - Nemotron-3-Nano IQ4_NL (30B/3.5B active, Mamba+MoE)"
+  echo "  qwen3.5    - Qwen3.5-35B-A3B UD-Q4_K_XL (35B/3B active, DeltaNet+MoE)"
   echo "  2507       - Qwen3-30B-A3B-2507 IQ4_NL"
   echo "  gpt-oss    - gpt-oss-20b MXFP4"
   echo "  next-80b   - Qwen3-Next-80B-A3B IQ4_NL"
@@ -56,7 +74,7 @@ fi
 echo "Starting llama-server: ${ALIAS} ($(basename "$MODEL_PATH"))"
 echo "Context: ${CTX} tokens"
 
-LD_LIBRARY_PATH=/usr/local/lib RADV_PERFTEST=bfloat16 llama-server \
+LD_LIBRARY_PATH=/usr/local/lib RADV_PERFTEST=bfloat16 /usr/local/bin/llama-server \
   -m "$MODEL_PATH" \
   -c "$CTX" \
   -fa on \
