@@ -172,8 +172,9 @@ Tested with `~/llama/test-capabilities.sh` — 12 tests across 3 categories. Run
 - **Reasoning** (3 tests): math (17×23+45=436), logic (syllogism), code generation
 
 **Notes:**
-- Multi-tool parallel calling works via `parallel_tool_calls: true` in the request (confirmed 5/5 on Nemotron and GLM). The test is non-deterministic — some models occasionally return sequential calls instead of parallel
-- 2 tool calling tests fail universally due to **llama.cpp server limitations**: complex nested args and `tool_choice: "none"` (server ignores the parameter)
+- Multi-tool parallel calling works via `parallel_tool_calls: true` in the request (confirmed 5/5 on Nemotron and GLM). The automated test is non-deterministic — some models occasionally return sequential calls instead of parallel
+- Complex nested args work (confirmed manually on GLM) but the automated test is non-deterministic — models sometimes flatten or omit nested objects
+- `tool_choice: "none"` fails universally — **llama.cpp server ignores this parameter** and calls tools anyway
 - JSON-only output fails on all models (thinking models emit chain-of-thought before JSON)
 - Qwen3-Coder-30B fails the math test — chain-of-thought arrives at the wrong answer
 - All models pass: single tool call, multi-turn tool use, system persona, refusal, logic, code generation
