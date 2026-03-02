@@ -57,12 +57,12 @@ Strix Halo is strictly bandwidth-bound. Smaller model = less data per token = fa
 
 ## Models
 
-All models use bartowski/Unsloth GGUFs — Ollama's GGUFs have broken Jinja templates for tool calling in llama.cpp.
+All models use Unsloth/bartowski GGUFs (except gpt-oss which uses ggml-org) — Ollama's GGUFs have broken Jinja templates for tool calling in llama.cpp.
 
 ### Coding: Qwen3-Coder-30B-A3B-Instruct (IQ4_NL)
 - 30.5B total / 3.3B active (MoE, 128 experts, 8 active)
 - 256K native context, tool calling support
-- **89 tok/s generation** on Strix Halo Vulkan
+- **87 tok/s generation** on Strix Halo Vulkan
 - Best choice for coding-specific tasks
 
 ```bash
@@ -73,7 +73,7 @@ hf download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 ### General Agent: GLM-4.7-Flash (IQ4_NL)
 - 30B total / ~3B active (MoE)
 - 200K context (with MLA), native tool calling
-- **71 tok/s generation** on Strix Halo Vulkan
+- **69 tok/s generation** on Strix Halo Vulkan
 - Best tool calling benchmark: τ²-Bench 79.5 (vs Qwen3-30B 49.0)
 - Best choice for agentic/research tasks with MCP tools
 
@@ -82,20 +82,10 @@ hf download bartowski/zai-org_GLM-4.7-Flash-GGUF \
   zai-org_GLM-4.7-Flash-IQ4_NL.gguf --local-dir ~/models
 ```
 
-### General: Qwen3-30B-A3B-Instruct-2507 (IQ4_NL)
-- Same architecture (30.5B total / 3.3B active), same speed (~87 tok/s)
-- July 2025 general-purpose refresh — broader capabilities, improved instruction following
-- Tool calling verified working
-
-```bash
-hf download unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF \
-  Qwen3-30B-A3B-Instruct-2507-IQ4_NL.gguf --local-dir ~/models
-```
-
 ### Lightweight: gpt-oss-20b (MXFP4)
 - 21B total / 3.6B active (OpenAI, Apache 2.0)
 - Only 12GB — smallest model with tool calling support
-- **71 tok/s generation** (MXFP4 dequant is heavier than IQ4_NL)
+- **77 tok/s generation** (MXFP4 dequant is heavier than IQ4_NL)
 - Tool calling verified working on llama.cpp v7865+
 
 ```bash
@@ -142,7 +132,7 @@ hf download unsloth/Qwen3.5-35B-A3B-GGUF \
 
 ### Model Comparison
 
-All benchmarked on Strix Halo, Vulkan backend, IQ4_NL quant, 64K context, `-fa on`.
+All benchmarked on Strix Halo, Vulkan backend, IQ4_NL quant (except where noted), 160K context, `-fa on`.
 
 | Model | Arch | Size | Active | Gen tok/s | Capability | Best For |
 |-------|------|------|--------|-----------|------------|----------|
@@ -203,20 +193,7 @@ Tested with `~/llama/test-capabilities.sh` — 12 tests across 3 categories. Run
 ~/llama/build-llama.sh rocm
 ```
 
-Prerequisites:
-```bash
-# Vulkan
-sudo pacman -S cmake vulkan-headers glslang
-
-# ROCm
-sudo pacman -S cmake rocm-hip-sdk
-```
-
-After build:
-```bash
-sudo cp /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server
-sudo cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli
-```
+The build script handles prerequisites via `nix-shell` and installs binaries + libraries to `/usr/local/bin/` and `/usr/local/lib/` automatically.
 
 ### 2. Download Model
 
@@ -229,8 +206,8 @@ huggingface-cli download unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF \
 ### 3. Run the Server
 
 ```bash
-~/llama/llama-serve.sh              # Default: GLM-4.7-Flash (71 tok/s, best agentic)
-~/llama/llama-serve.sh coder        # Qwen3-Coder-30B-A3B (89 tok/s)
+~/llama/llama-serve.sh              # Default: GLM-4.7-Flash (69 tok/s, best agentic)
+~/llama/llama-serve.sh coder        # Qwen3-Coder-30B-A3B (87 tok/s)
 ~/llama/llama-serve.sh coder-next   # Qwen3-Coder-Next (80B/3B, DeltaNet+MoE)
 ~/llama/llama-serve.sh nemotron     # Nemotron-3-Nano (30B/3.5B, Mamba+MoE, 75 tok/s)
 ~/llama/llama-serve.sh qwen3.5      # Qwen3.5-35B-A3B (35B/3B, DeltaNet+MoE)
@@ -284,7 +261,7 @@ ccr code
 
 The router translates Anthropic's Messages API to OpenAI Chat Completions (which llama-server speaks), handling streaming, tool use, and thinking blocks. Your normal `claude` command is unaffected.
 
-To switch models, edit the `Router.default` value in the config (e.g., `"llama-cpp,qwen3-next-80b"` for the smarter model). The model name must match the `-a` alias used by `llama-serve.sh`.
+To switch models, edit the `Router.default` value in the config (e.g., `"llama-cpp,glm-4.7-flash"` for the best agentic model). The model name must match the `-a` alias used by `llama-serve.sh`.
 
 **OpenCode** (`~/.config/opencode/opencode.json`):
 ```json
@@ -309,9 +286,9 @@ To switch models, edit the `Router.default` value in the config (e.g., `"llama-c
 ## Server Flags Explained
 
 ```bash
-RADV_PERFTEST=bfloat16 llama-server \
+RADV_PERFTEST=bfloat16 /usr/local/bin/llama-server \
   -m ~/models/Qwen3-Coder-30B-A3B-Instruct-IQ4_NL.gguf \
-  -c 65536 \        # Context window (64K tokens)
+  -c 163840 \       # Context window (160K tokens)
   -fa on \          # Flash attention (Vulkan coopmat1, scales at long context)
   -ngl 99 \         # Offload all layers to GPU
   --no-mmap \       # Required for Strix Halo (hangs without it)
@@ -374,34 +351,35 @@ RADV_PERFTEST=bfloat16 llama-server \
 
 ## Ollama Configuration (Alternative)
 
-If using Ollama instead of llama.cpp, apply these optimizations via systemd override:
+If using Ollama instead of llama.cpp, set these environment variables in your Ollama service configuration:
 
-```bash
-sudo mkdir -p /etc/systemd/system/ollama.service.d
-sudo tee /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
-[Service]
-Environment="OLLAMA_FLASH_ATTENTION=1"
-Environment="OLLAMA_KV_CACHE_TYPE=q8_0"
-Environment="OLLAMA_NUM_PARALLEL=1"
-EOF
-sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+OLLAMA_FLASH_ATTENTION=1
+OLLAMA_KV_CACHE_TYPE=q8_0
+OLLAMA_NUM_PARALLEL=1
 ```
 
+On NixOS, configure via `services.ollama.environmentVariables` in `configuration.nix`. On other distros, use a systemd override.
+
 ## VRAM Budget
+
+Example for a typical ~16GB MoE model at 160K context:
 
 | Component | Size |
 |-----------|------|
 | Model weights (IQ4_NL) | ~16 GB |
-| KV cache (64K, f16) | ~6.5 GB |
+| KV cache (160K, f16) | ~16 GB |
 | Compute graph | ~0.4 GB |
-| **Total** | **~23 GB** |
-| **Free VRAM** | **~73 GB** |
+| **Total** | **~32 GB** |
+| **Free VRAM** | **~64 GB** |
+
+Larger models (Coder-Next at 43GB) use more weight memory but still fit within 96GB at 160K context.
 
 ## Performance Summary
 
 **Starting point**: Ollama Q8_0 ROCm = 44.7 tok/s generation
 
-**Final result**: llama.cpp IQ4_NL Vulkan = **89 tok/s generation** (+99%)
+**Final result**: llama.cpp IQ4_NL Vulkan = **87 tok/s generation** (+95%)
 
 | Milestone | Gen (100 tok) | Change |
 |-----------|---------------|--------|
